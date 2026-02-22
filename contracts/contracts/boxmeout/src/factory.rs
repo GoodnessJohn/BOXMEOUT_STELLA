@@ -1,6 +1,8 @@
 // contract/src/factory.rs - Market Factory Contract Implementation
 // Handles market creation and lifecycle management
 
+#![allow(deprecated)]
+
 use soroban_sdk::{
     contract, contractevent, contractimpl, Address, Bytes, BytesN, Env, IntoVal, Symbol, Vec,
 };

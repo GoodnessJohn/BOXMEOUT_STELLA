@@ -1,6 +1,8 @@
 // contracts/amm.rs - Automated Market Maker for Outcome Shares
 // Enables trading YES/NO outcome shares with dynamic odds pricing (Polymarket model)
 
+#![allow(deprecated)]
+
 use soroban_sdk::{contract, contractevent, contractimpl, token, Address, BytesN, Env, Symbol};
 
 #[contractevent]
@@ -460,7 +462,7 @@ impl AMM {
         let usdc_client = soroban_sdk::token::Client::new(&env, &usdc_address);
 
         usdc_client.transfer(
-            env.current_contract_address(),
+            &env.current_contract_address(),
             &seller,
             &(payout_after_fee as i128),
         );
@@ -649,7 +651,7 @@ impl AMM {
         let token_client = token::Client::new(&env, &usdc_token);
         let total_withdrawal = yes_amount + no_amount;
         token_client.transfer(
-            env.current_contract_address(),
+            &env.current_contract_address(),
             &lp_provider,
             &(total_withdrawal as i128),
         );

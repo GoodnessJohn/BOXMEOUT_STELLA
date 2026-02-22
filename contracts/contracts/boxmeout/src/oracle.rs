@@ -1,6 +1,8 @@
 // contract/src/oracle.rs - Oracle & Market Resolution Contract Implementation
 // Handles multi-source oracle consensus for market resolution
 
+#![allow(deprecated)]
+
 use soroban_sdk::{
     contract, contractevent, contractimpl, contracttype, Address, BytesN, Env, Symbol, Vec,
 };

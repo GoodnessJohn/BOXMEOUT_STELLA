@@ -1,6 +1,8 @@
 // contracts/market.rs - Individual Prediction Market Contract
 // Handles predictions, bet commitment/reveal, market resolution, and winnings claims
 
+#![allow(deprecated)]
+
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, token, Address, BytesN,
     Env, Symbol, Vec,

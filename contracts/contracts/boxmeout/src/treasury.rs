@@ -1,6 +1,8 @@
 // contract/src/treasury.rs - Treasury Contract Implementation
 // Handles fee collection and reward distribution
 
+#![allow(deprecated)]
+
 use soroban_sdk::{contract, contractevent, contractimpl, token, Address, Env, Symbol};
 
 #[contractevent]
