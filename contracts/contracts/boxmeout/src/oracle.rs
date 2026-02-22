@@ -1077,7 +1077,7 @@ mod tests {
         let oracle1 = Address::generate(env);
         let oracle2 = Address::generate(env);
 
-        let oracle_id = env.register_contract(None, OracleManager);
+        let oracle_id = env.register(OracleManager, ());
         let oracle_client = OracleManagerClient::new(env, &oracle_id);
 
         env.mock_all_auths();
@@ -1557,8 +1557,7 @@ mod tests {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
-        let oracle_client =
-            OracleManagerClient::new(&env, &env.register_contract(None, OracleManager));
+        let oracle_client = OracleManagerClient::new(&env, &env.register(OracleManager, ()));
 
         // Initialize with no oracles registered
         oracle_client.initialize(&admin, &1);
@@ -1609,7 +1608,7 @@ mod tests {
         let event = events.last().unwrap();
 
         // Check event structure (ThresholdUpdatedEvent should be last event)
-        assert!(event.1.len() > 0, "Event should have topics");
+        assert!(!event.1.is_empty(), "Event should have topics");
     }
 
     #[test]
