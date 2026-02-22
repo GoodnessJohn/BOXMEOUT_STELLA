@@ -268,7 +268,14 @@ impl PredictionMarket {
         // Emit initialization event
         env.events().publish(
             (Symbol::new(&env, "MarketInitialized"),),
-            (market_id, creator, factory, oracle, closing_time, resolution_time),
+            (
+                market_id,
+                creator,
+                factory,
+                oracle,
+                closing_time,
+                resolution_time,
+            ),
         );
     }
 
@@ -2089,7 +2096,7 @@ mod tests {
         let pred = prediction.unwrap();
         assert_eq!(pred.outcome, 1);
         assert_eq!(pred.amount, 500);
-        assert_eq!(pred.claimed, false);
+        assert!(!pred.claimed);
 
         // Verify commitment removed
         let commitment_after = market_client.get_commitment(&user);
@@ -2187,7 +2194,7 @@ mod tests {
         // Need to re-commit first since commitment was removed, but prediction exists
         // So even if we try to commit again it'll fail due to duplicate reveal check
         let salt2 = BytesN::from_array(&env, &[5; 32]);
-        let commit_hash2 = compute_commit_hash(&env, &market_id, outcome, &salt2);
+        let _commit_hash2 = compute_commit_hash(&env, &market_id, outcome, &salt2);
 
         // Trying to commit again will fail with DuplicateCommit since commitment was removed
         // but prediction exists. Let's use test helper to set up the scenario:
@@ -2372,8 +2379,8 @@ mod tests {
         let salt2 = BytesN::from_array(&env, &[13; 32]);
         let outcome2 = 0u32;
         let amount2 = 300i128;
-        let commit_hash2 = compute_commit_hash(&env, &market_id, outcome2, &salt2);
-        market_client.commit_prediction(&user2, &commit_hash2, &amount2);
+        let _commit_hash2 = compute_commit_hash(&env, &market_id, outcome2, &salt2);
+        market_client.commit_prediction(&user2, &_commit_hash2, &amount2);
 
         assert_eq!(market_client.get_pending_count(), 2);
 
