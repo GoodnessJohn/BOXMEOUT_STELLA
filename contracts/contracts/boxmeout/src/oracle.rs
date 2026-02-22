@@ -830,10 +830,9 @@ impl OracleManager {
             .unwrap_or(1);
 
         // Update required consensus threshold
-        env.storage().persistent().set(
-            &Symbol::new(&env, REQUIRED_CONSENSUS_KEY),
-            &new_threshold,
-        );
+        env.storage()
+            .persistent()
+            .set(&Symbol::new(&env, REQUIRED_CONSENSUS_KEY), &new_threshold);
 
         // Emit ThresholdUpdated event
         ThresholdUpdatedEvent {
@@ -1478,7 +1477,10 @@ mod tests {
 
         // Check consensus - should be reached with threshold of 1
         let (has_consensus, _) = oracle_client.check_consensus(&market_id);
-        assert!(has_consensus, "Consensus should be reached with threshold of 1");
+        assert!(
+            has_consensus,
+            "Consensus should be reached with threshold of 1"
+        );
     }
 
     #[test]
@@ -1506,14 +1508,20 @@ mod tests {
 
         // Check consensus - should NOT be reached yet
         let (has_consensus, _) = oracle_client.check_consensus(&market_id);
-        assert!(!has_consensus, "Consensus should not be reached with only 1 of 2 required");
+        assert!(
+            !has_consensus,
+            "Consensus should not be reached with only 1 of 2 required"
+        );
 
         // Submit second attestation
         oracle_client.submit_attestation(&oracle2, &market_id, &1, &data_hash);
 
         // Now consensus should be reached
         let (has_consensus, _) = oracle_client.check_consensus(&market_id);
-        assert!(has_consensus, "Consensus should be reached with 2 of 2 required");
+        assert!(
+            has_consensus,
+            "Consensus should be reached with 2 of 2 required"
+        );
     }
 
     #[test]
@@ -1549,7 +1557,8 @@ mod tests {
         env.mock_all_auths();
 
         let admin = Address::generate(&env);
-        let oracle_client = OracleManagerClient::new(&env, &env.register_contract(None, OracleManager));
+        let oracle_client =
+            OracleManagerClient::new(&env, &env.register_contract(None, OracleManager));
 
         // Initialize with no oracles registered
         oracle_client.initialize(&admin, &1);
@@ -1562,7 +1571,7 @@ mod tests {
     #[should_panic]
     fn test_set_consensus_threshold_unauthorized_caller() {
         let env = Env::default();
-        
+
         let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
         register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
 
@@ -1682,8 +1691,11 @@ mod tests {
         // (Note: The implementation applies threshold globally, but this test
         // verifies the function doesn't break existing market state)
         let (has_consensus, _) = oracle_client.check_consensus(&market_id);
-        
+
         // With new threshold of 1, consensus should be reached
-        assert!(has_consensus, "Threshold update should apply to consensus checks");
+        assert!(
+            has_consensus,
+            "Threshold update should apply to consensus checks"
+        );
     }
 }
