@@ -26,6 +26,8 @@ npm run build > /dev/null 2>&1 &
 wait
 
 echo "  - Running Prisma validation..."
+# Set dummy DATABASE_URL for validation if not set
+export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:password@localhost:5432/boxmeout_dev?schema=public}"
 npm run prisma:generate > /dev/null 2>&1
 npx prisma validate
 

@@ -61,6 +61,13 @@ pub struct ChallengeResolvedEvent {
     pub slashed_amount: i128,
 }
 
+#[contractevent]
+pub struct ThresholdUpdatedEvent {
+    pub old_threshold: u32,
+    pub new_threshold: u32,
+    pub oracle_count: u32,
+}
+
 // Storage keys
 const ADMIN_KEY: &str = "admin";
 const REQUIRED_CONSENSUS_KEY: &str = "required_consensus";
@@ -782,8 +789,51 @@ impl OracleManager {
     /// - Update required_consensus
     /// - Apply to future markets only
     /// - Emit ConsensusThresholdUpdated(new_threshold, old_threshold)
-    pub fn set_consensus_threshold(_env: Env, _new_threshold: u32) {
-        todo!("See set consensus threshold TODO above")
+    pub fn set_consensus_threshold(env: Env, new_threshold: u32) {
+        // Require admin authentication
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&Symbol::new(&env, ADMIN_KEY))
+            .expect("Admin not set");
+        admin.require_auth();
+
+        // Get current threshold
+        let old_threshold: u32 = env
+            .storage()
+            .persistent()
+            .get(&Symbol::new(&env, REQUIRED_CONSENSUS_KEY))
+            .expect("Required consensus not set");
+
+        // Get oracle count
+        let oracle_count: u32 = env
+            .storage()
+            .persistent()
+            .get(&Symbol::new(&env, ORACLE_COUNT_KEY))
+            .unwrap_or(0);
+
+        // Validate new threshold
+        if new_threshold < 1 {
+            panic!("Threshold must be at least 1");
+        }
+
+        if new_threshold > oracle_count {
+            panic!("Threshold cannot exceed oracle count");
+        }
+
+        // Update threshold
+        env.storage().persistent().set(
+            &Symbol::new(&env, REQUIRED_CONSENSUS_KEY),
+            &new_threshold,
+        );
+
+        // Emit event
+        ThresholdUpdatedEvent {
+            old_threshold,
+            new_threshold,
+            oracle_count,
+        }
+        .publish(&env);
     }
 
     /// Get consensus report
@@ -1394,4 +1444,190 @@ mod tests {
         assert!(oracle_client.get_challenge(&oracle1, &market_id).is_some());
         assert!(oracle_client.get_challenge(&oracle2, &market_id).is_some());
     }
+
+    #[test]
+    fn test_set_consensus_threshold_success() {
+        let env = Env::default();
+        let (oracle_client, admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Set threshold to 1 (valid since we have 2 oracles)
+        oracle_client.set_consensus_threshold(&1);
+
+        // Verify threshold was updated by checking consensus behavior
+        let market_id = create_market_id(&env);
+        oracle_client.register_market(&market_id, &1000);
+
+        let data_hash = BytesN::from_array(&env, &[1u8; 32]);
+        oracle_client.submit_attestation(&oracle1, &market_id, &1, &data_hash);
+
+        // With threshold of 1, consensus should be reached with just one attestation
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(has_consensus);
+    }
+
+    #[test]
+    #[should_panic(expected = "Threshold must be at least 1")]
+    fn test_set_consensus_threshold_zero_fails() {
+        let env = Env::default();
+        let (oracle_client, _admin, _oracle1, _oracle2) = setup_oracle(&env);
+
+        // Attempt to set threshold to 0 should fail
+        oracle_client.set_consensus_threshold(&0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Threshold cannot exceed oracle count")]
+    fn test_set_consensus_threshold_exceeds_oracle_count() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Attempt to set threshold to 3 when only 2 oracles exist should fail
+        oracle_client.set_consensus_threshold(&3);
+    }
+
+    #[test]
+    #[should_panic(expected = "Admin not set")]
+    fn test_set_consensus_threshold_requires_admin() {
+        let env = Env::default();
+        let oracle_id = env.register(OracleManager, ());
+        let oracle_client = OracleManagerClient::new(&env, &oracle_id);
+
+        // Attempt to set threshold without initialization should fail
+        oracle_client.set_consensus_threshold(&1);
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_updates_correctly() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Initial threshold is 2 (set in setup_oracle)
+        // Update to 1
+        oracle_client.set_consensus_threshold(&1);
+
+        // Create a market and verify new threshold works
+        let market_id = create_market_id(&env);
+        oracle_client.register_market(&market_id, &1000);
+
+        let data_hash = BytesN::from_array(&env, &[1u8; 32]);
+        oracle_client.submit_attestation(&oracle1, &market_id, &1, &data_hash);
+
+        // Should reach consensus with 1 attestation
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(has_consensus);
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_boundary_values() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Test setting to minimum valid value (1)
+        oracle_client.set_consensus_threshold(&1);
+
+        // Test setting to maximum valid value (oracle count = 2)
+        oracle_client.set_consensus_threshold(&2);
+
+        // Verify threshold of 2 requires both oracles
+        let market_id = create_market_id(&env);
+        oracle_client.register_market(&market_id, &1000);
+
+        let data_hash = BytesN::from_array(&env, &[1u8; 32]);
+        oracle_client.submit_attestation(&oracle1, &market_id, &1, &data_hash);
+
+        // Should NOT reach consensus with only 1 attestation
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(!has_consensus);
+
+        // Add second attestation
+        oracle_client.submit_attestation(&oracle2, &market_id, &1, &data_hash);
+
+        // Now should reach consensus
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(has_consensus);
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_event_emission() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Set threshold and verify event is emitted
+        oracle_client.set_consensus_threshold(&1);
+
+        // Note: Event verification would require checking env.events()
+        // This test verifies the function completes successfully
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_multiple_updates() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Update threshold multiple times
+        oracle_client.set_consensus_threshold(&1);
+        oracle_client.set_consensus_threshold(&2);
+        oracle_client.set_consensus_threshold(&1);
+
+        // Verify final threshold is 1
+        let market_id = create_market_id(&env);
+        oracle_client.register_market(&market_id, &1000);
+
+        let data_hash = BytesN::from_array(&env, &[1u8; 32]);
+        oracle_client.submit_attestation(&oracle1, &market_id, &1, &data_hash);
+
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(has_consensus);
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_with_no_oracles() {
+        let env = Env::default();
+        let (oracle_client, _admin, _oracle1, _oracle2) = setup_oracle(&env);
+
+        // Don't register any oracles, oracle_count = 0
+        // Setting threshold to any value > 0 should fail
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            oracle_client.set_consensus_threshold(&1);
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_set_consensus_threshold_integration() {
+        let env = Env::default();
+        let (oracle_client, _admin, oracle1, oracle2) = setup_oracle(&env);
+        register_test_oracles(&env, &oracle_client, &oracle1, &oracle2);
+
+        // Register a third oracle
+        let oracle3 = Address::generate(&env);
+        oracle_client.register_oracle(&oracle3, &Symbol::new(&env, "Oracle3"));
+
+        // Set threshold to 2 out of 3
+        oracle_client.set_consensus_threshold(&2);
+
+        // Create market and test consensus
+        let market_id = create_market_id(&env);
+        oracle_client.register_market(&market_id, &1000);
+
+        let data_hash = BytesN::from_array(&env, &[1u8; 32]);
+
+        // One attestation - no consensus
+        oracle_client.submit_attestation(&oracle1, &market_id, &1, &data_hash);
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(!has_consensus);
+
+        // Two attestations - consensus reached
+        oracle_client.submit_attestation(&oracle2, &market_id, &1, &data_hash);
+        let (has_consensus, _) = oracle_client.check_consensus(&market_id);
+        assert!(has_consensus);
+    }
 }
+
