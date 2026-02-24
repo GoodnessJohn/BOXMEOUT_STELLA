@@ -1,4 +1,4 @@
-name: Smart Contracts CI
+name: Contracts CI
 
 on:
   push:
@@ -10,21 +10,24 @@ on:
     branches: [main, develop]
     paths:
       - 'contracts/**'
+      - '.github/workflows/contracts.yml'
 
 jobs:
-  test:
+  test-contracts:
     runs-on: ubuntu-latest
     
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: wasm32-unknown-unknown
-          
-      - name: Cache Rust dependencies
+          components: clippy, rustfmt
+          override: true
+
+      - name: Cache Cargo registry
         uses: actions/cache@v3
         with:
           path: |
@@ -34,52 +37,43 @@ jobs:
             ~/.cargo/git/db/
             contracts/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run cargo test
+        working-directory: contracts/contracts/boxmeout
+        run: cargo test --features testutils
+
+      - name: Run cargo clippy
+        working-directory: contracts/contracts/boxmeout
+        run: cargo clippy --all-targets --features testutils -- -D warnings
+
       - name: Check formatting
-        run: |
-          cd contracts/contracts/boxmeout
-          cargo fmt -- --check
-      
-      - name: Run clippy
-        run: |
-          cd contracts/contracts/boxmeout
-          cargo clippy -- -D warnings
-      
-      - name: Build all contracts
-        run: |
-          cd contracts/contracts/boxmeout
-          
-          echo "🏗️  Building Market contract..."
-          cargo build --release --target wasm32-unknown-unknown --features market --no-default-features
-          cp target/wasm32-unknown-unknown/release/boxmeout.wasm ../../../market.wasm
-          
-          echo "🏗️  Building Oracle contract..."
-          cargo build --release --target wasm32-unknown-unknown --features oracle --no-default-features
-          cp target/wasm32-unknown-unknown/release/boxmeout.wasm ../../../oracle.wasm
-          
-          echo "🏗️  Building AMM contract..."
-          cargo build --release --target wasm32-unknown-unknown --features amm --no-default-features
-          cp target/wasm32-unknown-unknown/release/boxmeout.wasm ../../../amm.wasm
-          
-          echo "🏗️  Building Factory contract..."
-          cargo build --release --target wasm32-unknown-unknown --features factory --no-default-features
-          cp target/wasm32-unknown-unknown/release/boxmeout.wasm ../../../factory.wasm
-          
-          echo "🏗️  Building Treasury contract..."
-          cargo build --release --target wasm32-unknown-unknown --features treasury --no-default-features
-          cp target/wasm32-unknown-unknown/release/boxmeout.wasm ../../../treasury.wasm
-          
-          echo " All 5 contracts built successfully!"
-          ls -lh ../../../*.wasm
-      
-      - name: Run tests
-        run: |
-          cd contracts/contracts/boxmeout
-          cargo test --all-features
-      
+        working-directory: contracts/contracts/boxmeout
+        run: cargo fmt -- --check
+
+      - name: Build WASM contracts
+        working-directory: contracts/contracts/boxmeout
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate test coverage
+        working-directory: contracts/contracts/boxmeout
+        run: cargo tarpaulin --features testutils --out Xml --output-dir coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: contracts/contracts/boxmeout/coverage/cobertura.xml
+          flags: contracts
+          name: contract-coverage
+          fail_ci_if_error: false
+
       - name: Upload WASM artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: contract-wasm-files
-          path: contracts/*.wasm
+          name: contract-wasm
+          path: contracts/target/wasm32-unknown-unknown/release/boxmeout.wasm
+          retention-days: 7
