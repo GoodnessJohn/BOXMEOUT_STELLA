@@ -52,6 +52,11 @@ import { setupSwagger } from './config/swagger.js';
 // Import Cron initialization
 import { cronService } from './services/cron.service.js';
 
+// Import WebSocket initialization
+import { createServer } from 'http';
+import { initializeSocketIO } from './websocket/realtime.js';
+import { leaderboardBroadcasterService } from './services/leaderboard-broadcaster.service.js';
+
 // Initialize Express app
 const app: express.Express = express();
 const PORT = process.env.PORT || 3000;
@@ -247,14 +252,27 @@ async function startServer(): Promise<void> {
     // Initialize Cron Service
     await cronService.initialize();
 
+    // Create HTTP server
+    const httpServer = createServer(app);
+
+    // Initialize Socket.IO
+    const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+    const io = initializeSocketIO(httpServer, corsOrigin);
+    logger.info('Socket.IO initialized');
+
+    // Initialize leaderboard broadcaster with Socket.IO (Issue #116)
+    leaderboardBroadcasterService.initialize(io);
+    logger.info('Leaderboard broadcaster initialized');
+
     // Start HTTP server
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       logger.info('BoxMeOut Stella Backend API started', {
         environment: NODE_ENV,
         port: PORT,
         api: `http://localhost:${PORT}`,
         docs: `http://localhost:${PORT}/api-docs`,
         health: `http://localhost:${PORT}/health`,
+        websocket: `ws://localhost:${PORT}`,
       });
     });
   } catch (error) {
@@ -271,6 +289,9 @@ async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`${signal} received. Shutting down gracefully`);
 
   try {
+    // Stop scheduled jobs
+    await cronService.shutdown();
+
     // Close Redis connection
     await closeRedisConnection();
 

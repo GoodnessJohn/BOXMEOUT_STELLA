@@ -1,6 +1,7 @@
 // Cron service - handles scheduled tasks
 import cron from 'node-cron';
 import { leaderboardService } from './leaderboard.service.js';
+import { leaderboardBroadcasterService } from './leaderboard-broadcaster.service.js';
 import { logger } from '../utils/logger.js';
 
 export class CronService {
@@ -23,7 +24,20 @@ export class CronService {
       await leaderboardService.calculateRanks();
     });
 
+    // Start leaderboard broadcaster (runs every 5 minutes internally)
+    // Issue #116: Scheduled rank change broadcasting
+    leaderboardBroadcasterService.start();
+
     logger.info('Scheduled jobs initialized successfully');
+  }
+
+  /**
+   * Cleanup scheduled jobs on shutdown
+   */
+  async shutdown() {
+    logger.info('Shutting down scheduled jobs');
+    leaderboardBroadcasterService.stop();
+    logger.info('Scheduled jobs shut down successfully');
   }
 }
 
