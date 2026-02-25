@@ -3223,10 +3223,23 @@ mod market_leaderboard_tests {
 
         assert_eq!(winners.len(), 2);
     }
+}
 
-    // ============================================================================
-    // Tests for Issue #114: Real-time Event Broadcasting
-    // ============================================================================
+// ============================================================================
+// Tests for Issue #114: Real-time Event Broadcasting
+// ============================================================================
+
+#[cfg(test)]
+mod event_broadcasting_tests {
+    use super::*;
+    use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
+
+    fn create_token_contract<'a>(env: &Env, admin: &Address) -> token::StellarAssetClient<'a> {
+        let token_address = env
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
+        token::StellarAssetClient::new(env, &token_address)
+    }
 
     #[test]
     fn test_prediction_update_event_emitted_on_reveal() {
@@ -3668,4 +3681,5 @@ mod market_leaderboard_tests {
         assert_eq!(state.total_volume, 500);
     }
 }
+
 
