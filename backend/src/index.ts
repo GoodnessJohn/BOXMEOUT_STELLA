@@ -13,6 +13,8 @@ import tradingRoutes from './routes/trading.js';
 import treasuryRoutes from './routes/treasury.routes.js';
 import referralsRoutes from './routes/referrals.routes.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
+import walletRoutes from './routes/wallet.routes.js';
 
 // Import Redis initialization
 import {
@@ -53,9 +55,15 @@ import { setupSwagger } from './config/swagger.js';
 import { cronService } from './services/cron.service.js';
 
 // Import WebSocket initialization
+
 import { createServer } from 'http';
 import { initializeSocketIO } from './websocket/realtime.js';
 import { leaderboardBroadcasterService } from './services/leaderboard-broadcaster.service.js';
+
+import { initializeSocketIO } from './websocket/realtime.js';
+import { notificationService } from './services/notification.service.js';
+import { createServer } from 'http';
+
 
 // Initialize Express app
 const app: express.Express = express();
@@ -225,6 +233,12 @@ app.use('/api/referrals', referralsRoutes);
 // Leaderboard routes
 app.use('/api/leaderboard', leaderboardRoutes);
 
+// Notification routes
+app.use('/api/notifications', notificationsRoutes);
+
+// Wallet routes (USDC withdraw)
+app.use('/api/wallet', walletRoutes);
+
 // =============================================================================
 // ERROR HANDLING - UPDATED WITH NEW ERROR HANDLER
 // =============================================================================
@@ -239,6 +253,9 @@ app.use(errorHandler);
 // SERVER STARTUP
 // =============================================================================
 
+// Create HTTP server
+const httpServer = createServer(app);
+
 async function startServer(): Promise<void> {
   try {
     // Initialize Redis connection
@@ -248,6 +265,14 @@ async function startServer(): Promise<void> {
     // TODO: Initialize Prisma/Database connection
     // await prisma.$connect();
     // logger.info('Database connected');
+
+    // Initialize WebSocket
+    const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+    const io = initializeSocketIO(httpServer, corsOrigin);
+    logger.info('WebSocket initialized');
+
+    // Connect notification service to WebSocket
+    notificationService.setSocketIO(io);
 
     // Initialize Cron Service
     await cronService.initialize();
